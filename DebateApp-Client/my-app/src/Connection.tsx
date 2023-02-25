@@ -1,33 +1,62 @@
 import React, { useState, useEffect } from "react";
+import { Client } from "@stomp/stompjs";
 
-function Connection() {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+function CountDownClock() {
+  const [name, setName] = useState("");
+  const [response, setResponse] = useState("");
+  const [stompClient, setStompClient] = useState<Client | null>(null);
 
   useEffect(() => {
-    const newSocket = new WebSocket("ws://localhost:8080/websocket");
+    const socket = new WebSocket("ws://localhost:8080/ws");
+    const client = new Client({
+      webSocketFactory: () => socket,
+      debug: (msg) => console.log(msg),
+      forceBinaryWSFrames: false,
+      maxWebSocketChunkSize: 65536,
+    });
 
-    newSocket.onopen = () => {
-      console.log("WebSocket connection opened");
+    client.onConnect = (frame) => {
+      client.subscribe("/topic/messages", (message) => {
+        setResponse(JSON.parse(message.body).content);
+      });
     };
 
-    newSocket.onmessage = (event) => {
-      console.log("Received message:", event.data);
-    };
-
-    setSocket(newSocket);
+    client.activate();
+    setStompClient(client);
 
     return () => {
-      newSocket.close();
+      client.deactivate();
+      console.log("WebSocket connection is closed.");
     };
   }, []);
 
-  const sendMessage = (message: string) => {
-    if (socket) {
-      socket.send(message);
+  const sendMessage = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!stompClient) {
+      return;
     }
+    stompClient.publish({
+      destination: "/app/chat",
+      body: JSON.stringify({ name }),
+    });
   };
 
-  return <div>{/* Render your React component here */}</div>;
+  return (
+    <div>
+      <form onSubmit={sendMessage}>
+        <label>
+          Name:
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <input type="submit" value="Send" />
+      </form>
+      <p>{response}</p>
+    </div>
+  );
 }
 
-export default Connection;
+export default CountDownClock;
